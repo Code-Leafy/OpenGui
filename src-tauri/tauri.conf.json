@@ -1,0 +1,51 @@
+{
+  "productName": "OpenConnect GUI",
+  "version": "0.1.0",
+  "identifier": "com.openconnect.gui",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "publisher": "OpenConnect GUI",
+    "resources": {
+      "../.toolchain/openconnect": ".toolchain/openconnect"
+    }
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "OpenConnect GUI",
+        "width": 1175,
+        "height": 710,
+        "minWidth": 805,
+        "minHeight": 565,
+        "center": true,
+        "resizable": true,
+        "decorations": false
+      }
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Code-Leafy/OpenGui/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZCQTZFNDA5M0FCNjZBQjYKUldTMmFyWTZDZVNtKzBTSXpQZVN1cUxYeU0weVduNXFuOGZ3WnlkQ3RTSDFzUVBRUkREbWcra3QK"
+    }
+  }
+}

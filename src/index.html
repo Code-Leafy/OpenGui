@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OpenConnect VPN</title>
+<style>
+  :root {
+    --bg-dark: #09090b;
+    --bg-sidebar: #121214;
+    --bg-panel: #18181b;
+    --bg-hover: rgba(255, 255, 255, 0.08);
+    --primary: #3b82f6;
+    --primary-dim: rgba(59, 130, 246, 0.2);
+    --text-main: #f3f4f6;
+    --text-muted: #9ca3af;
+    --border: rgba(255, 255, 255, 0.08);
+    --danger: #ef4444;
+    /* Shield / security accent (kept distinct from the connect-blue) */
+    --shield: #34d399;
+    --shield-dim: rgba(52, 211, 153, 0.14);
+    --titlebar-h: 34px;
+
+    /* ── Global UI sizing knobs ──────────────────────────────────────────
+       Tweak --ui-scale to shrink/grow every rem-based element at once.
+       --font-base drives the root font-size (px). Fixed-px values that must
+       track the scale reference --ui-scale directly. */
+    --ui-scale: 0.94;
+    --font-base: 15px;
+    --sidebar-w: 296px;
+    --rail-w: 82px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+  /* Disable all browser-native interactions: text selection, drag/drop,
+     right-click menu, image drag, and the tap-highlight. Text inputs and
+     textareas are re-enabled below so the user can still type/select there. */
+  * {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-user-drag: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  input, textarea {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+  img, a, svg { -webkit-user-drag: none; user-drag: none; }
+
+  body { font-weight: 350; letter-spacing: 0.1px; }
+
+  html { font-size: calc(var(--font-base) * var(--ui-scale)); }
+
+  body {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    overflow: hidden;
+    height: 100vh;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    /* Map-like background gradient */
+    background: var(--bg-dark);
+  }
+
+  /* ── Custom title bar ─────────────────────────────────────────────── */
+  .titlebar {
+    height: var(--titlebar-h);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border);
+    -webkit-user-select: none; user-select: none;
+  }
+  .titlebar-drag {
+    flex: 1; height: 100%;
+    display: flex; align-items: center; gap: 9px;
+    padding: 0 14px;
+  }
+  .titlebar-logo {
+    width: 15px; height: 15px; color: var(--text-muted);
+  }
+  .titlebar-logo svg { width: 100%; height: 100%; stroke: currentColor; stroke-width: 2; fill: none; }
+  .titlebar-title {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    letter-spacing: 0.2px;
+  }
+  .titlebar-buttons { display: flex; height: 100%; }
+  .tb-btn {
+    width: 46px; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; cursor: pointer;
+    color: var(--text-muted);
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .tb-btn svg { width: 11px; height: 11px; stroke: currentColor; stroke-width: 1.6; fill: none; }
+  .tb-btn:hover { background: rgba(255,255,255,0.07); color: var(--text-main); }
+  .tb-btn.tb-close:hover { background: var(--danger); color: #fff; }
+
+  #app {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* Sidebar */
+  .sidebar {
+    width: var(--sidebar-w);
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 20;
+    flex-shrink: 0;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 24px;
+  }
+  .brand svg { width: 28px; height: 28px; fill: var(--primary); }
+
+  .nav-tabs {
+    display: flex;
+    padding: 0 20px;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .nav-tab {
+    flex: 1;
+    text-align: center;
+    padding: 12px 0;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    position: relative;
+  }
+  .nav-tab:hover { color: var(--text-main); }
+  .nav-tab.active { color: var(--text-main); }
+  .nav-tab.active::after {
+    content: ''; position: absolute; bottom: -1px; left: 0; width: 100%; height: 2px; background: var(--primary);
+  }
+
+  .profile-list {
+    flex: 1;
+    overflow-y: auto;
+    display: none;
+    flex-direction: column;
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .profile-list.active { display: flex; }
+  .profile-list::-webkit-scrollbar { width: 6px; }
+  .profile-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+  .profile-actions { display: none; align-items: center; gap: 4px; margin-left: auto; }
+  .profile-card:hover .profile-actions { display: flex; }
+  .btn-icon { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+  .btn-icon:hover { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+  .btn-icon svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+  .profile-card {
+    animation: slideInProfile 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    opacity: 0;
+    transform: translateX(-15px);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+  }
+  .profile-card:hover { background: var(--bg-hover); }
+  .profile-card.active { background: rgba(255,255,255,0.04); border-color: var(--border); }
+  
+  .profile-icon {
+    width: 40px; height: 40px; border-radius: 10px; background: var(--bg-panel); display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .profile-card.active .profile-icon { color: var(--primary); background: var(--primary-dim); border: 1px solid rgba(59, 130, 246, 0.3); }
+  .profile-icon svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.5; fill: none; }
+  .profile-icon img.flag { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+
+  .profile-info { display: flex; flex-direction: column; gap: 4px; flex: 1; overflow: hidden; }
+  .profile-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-main); }
+  .profile-meta { display: flex; align-items: center; gap: 6px; }
+  .profile-server { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .profile-protocol { font-size: 11px; color: var(--text-muted); opacity: 0.7; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .btn-add-profile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 16px 20px 24px 20px;
+    padding: 12px;
+    color: var(--text-main);
+    font-size: 14px;
+    font-weight: 600;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.2s;
+  }
+  .btn-add-profile:hover { background: var(--bg-hover); }
+  .btn-add-profile svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+  /* Main Area */
+  .main-area {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .main-area::-webkit-scrollbar { width: 6px; }
+  .main-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+  .top-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: clamp(20px, 5vh, 60px);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .server-flag-large {
+    width: 56px; height: 42px; border-radius: 8px; background: #333; margin-bottom: 18px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    flex-shrink: 0; object-fit: cover; display: block;
+  }
+  
+  .server-title {
+    font-size: clamp(22px, 2.8vw, 32px);
+    font-weight: 400;
+    letter-spacing: -0.6px;
+    margin-bottom: 6px;
+    text-align: center;
+    padding: 0 16px;
+  }
+  
+  .server-subtitle {
+    font-size: clamp(12px, 1.3vw, 14px);
+    color: var(--text-muted);
+    font-weight: 350;
+    margin-bottom: 24px;
+    text-align: center;
+    padding: 0 16px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .connection-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: clamp(16px, 4vh, 40px) 0;
+    min-height: 0;
+  }
+
+  /* Interactive Map Pin / Connect Button.
+     Everything scales off --ring (the outer ring diameter) so the whole
+     control shrinks/grows together across resolutions. */
+  .connect-target {
+    --ring: clamp(260px, 40vh, 460px);
+    --core: calc(var(--ring) * 0.82);
+    position: relative;
+    width: var(--core);
+    height: var(--core);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .ring {
+    position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    border-radius: 50%;
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .ring.outer { width: var(--ring); height: var(--ring); background: transparent; border-color: rgba(255,255,255,0.06); }
+  .ring.inner { width: calc(var(--ring) * 0.8); height: calc(var(--ring) * 0.8); background: transparent; border-color: rgba(255,255,255,0.04); }
+
+  .core {
+    width: var(--core); height: var(--core);
+    border-radius: 50%;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    box-shadow: none;
+    transition: background 0.25s ease, color 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+    z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); font-weight: 500; font-size: clamp(10px, 0.9vw, 12px); text-transform: uppercase; letter-spacing: 2.5px;
+  }
+
+  .connect-target:hover .core { color: var(--text-main); background: var(--bg-hover); border-color: rgba(255,255,255,0.16); }
+  
+  /* Connecting state */
+  .connect-target.connecting .ring.outer { animation: pulse-ring 1.5s infinite; background: var(--primary-dim); border-color: rgba(0,208,132,0.2); }
+  .connect-target.connecting .ring.inner { width: calc(var(--ring) * 0.425); height: calc(var(--ring) * 0.425); background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); }
+  .connect-target.connecting .core { background: var(--primary); color: #fff; box-shadow: none; }
+
+  /* Connected state */
+  .connect-target.connected .ring.outer { width: var(--ring); height: var(--ring); background: rgba(59, 130, 246, 0.1); border-color: rgba(0,208,132,0.2); }
+  .connect-target.connected .ring.inner { width: calc(var(--ring) * 0.575); height: calc(var(--ring) * 0.575); background: rgba(59, 130, 246, 0.2); border-color: rgba(0,208,132,0.4); }
+  .connect-target.connected .core { background: var(--primary-dim); color: var(--primary); border: 1px solid var(--primary); box-shadow: none; width: calc(var(--ring) * 0.82); height: calc(var(--ring) * 0.82); }
+
+  /* Disconnecting state */
+  .connect-target.disconnecting .ring.outer { animation: pulse-ring-red 1s infinite; background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.2); }
+  .connect-target.disconnecting .ring.inner { width: calc(var(--ring) * 0.425); height: calc(var(--ring) * 0.425); background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
+  .connect-target.disconnecting .core { background: var(--danger); color: #fff; box-shadow: none; }
+
+  @keyframes pulse-ring {
+    0% { width: var(--core); height: var(--core); opacity: 1; }
+    100% { width: var(--ring); height: var(--ring); opacity: 0; }
+  }
+
+  @keyframes slideInProfile {
+    from { opacity: 0; transform: translateX(-15px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes pulse-ring-red {
+    0% { width: var(--core); height: var(--core); opacity: 1; }
+    100% { width: var(--ring); height: var(--ring); opacity: 0; }
+  }
+
+  /* Stats Panel */
+  .stats-panel {
+    background: transparent;
+    padding: 0 clamp(16px, 3vw, 40px) clamp(16px, 2.5vh, 28px);
+    display: flex;
+    gap: 10px;
+    margin-top: auto;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  .stat-box {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  
+  .stat-header {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  
+  .stat-value {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .status-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; transition: background 0.3s, box-shadow 0.3s; }
+  .status-indicator.connected { background: var(--primary); box-shadow: 0 0 10px var(--primary); }
+
+  /* Right Sidebar (Settings/Tools) */
+  .right-sidebar {
+    width: var(--rail-w);
+    background: var(--bg-sidebar);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 0;
+    gap: 28px;
+    z-index: 20;
+    flex-shrink: 0;
+  }
+
+  .tool-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 11px;
+    font-weight: 500;
+    width: 100%;
+  }
+  .tool-btn:hover { color: var(--text-main); }
+  .tool-btn.active { color: var(--primary); }
+  .tool-btn svg { width: 26px; height: 26px; stroke: currentColor; stroke-width: 1.5; fill: none; }
+  
+  .tool-btn.active svg { stroke-width: 2; filter: drop-shadow(0 0 8px var(--primary-dim)); }
+
+  /* ── NetShield fly-out (expands to the LEFT of the button) ─────────── */
+  .ns-anchor { position: relative; width: 100%; display: flex; justify-content: center; }
+  .ns-flyout {
+    position: absolute;
+    top: 50%; right: calc(100% + 10px);
+    transform: translateY(-50%);
+    display: flex; gap: 6px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.16,1,0.3,1);
+    transform: translateY(-50%) translateX(8px);
+    z-index: 40;
+  }
+  .ns-flyout.open {
+    opacity: 1; pointer-events: auto;
+    transform: translateY(-50%) translateX(0);
+  }
+  .ns-fly-item {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    width: 64px; padding: 10px 4px;
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+    color: var(--text-muted); cursor: pointer;
+    font-size: 11px; font-weight: 500;
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+  }
+  .ns-fly-item:hover { background: var(--bg-hover); color: var(--text-main); border-color: rgba(255,255,255,0.16); }
+  .ns-fly-icon {
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; color: inherit;
+    transition: color 0.14s ease;
+  }
+  .ns-fly-icon svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 1.7; fill: none; }
+  .ns-fly-item.on { color: var(--primary); }
+  .ns-fly-item.on .ns-fly-icon { color: var(--primary); }
+  .ns-fly-label { line-height: 1; }
+
+  /* Modals and Logs */
+  .modal-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal-overlay.active { display: flex; }
+  
+  .modal {
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px; width: 640px;
+    box-shadow: 0 24px 48px rgba(0,0,0,0.5);
+  }
+  .modal h2 { font-size: 22px; font-weight: 600; margin-bottom: 24px; letter-spacing: -0.5px; }
+  
+  .settings-screen {
+    background: var(--bg-panel);
+    width: min(460px, calc(100vw - 32px));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  }
+  .settings-header { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 20px 22px; border-bottom: 1px solid var(--border); }
+  .settings-header h2 { font-size: 18px; font-weight: 500; margin: 0; letter-spacing: -0.2px; }
+  .settings-body { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .settings-body .input-group {
+    background: transparent; padding: 14px 14px; border-radius: 10px; border: none; margin: 0;
+    transition: background 0.14s ease;
+  }
+  .settings-body .input-group:hover { background: rgba(255,255,255,0.03); }
+  .settings-body .input-group label { margin: 0; font-size: 14px; font-weight: 400; color: var(--text-main); }
+  .settings-body .input-group select {
+    margin-top: 12px; width: 100%;
+    background: rgba(0,0,0,0.25); border: 1px solid var(--border);
+    color: var(--text-main); border-radius: 8px; padding: 11px 13px; font-size: 14px; outline: none;
+  }
+  .settings-body .input-group select:focus { border-color: var(--primary); }
+
+  /* ── Settings: sectioned rows ─────────────────────────────────────── */
+  .set-section-title {
+    font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-muted); padding: 14px 12px 6px;
+  }
+  .set-section-title:first-child { padding-top: 6px; }
+  .set-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 14px; border-radius: 10px;
+    transition: background 0.14s ease;
+  }
+  .set-row:hover { background: rgba(255,255,255,0.03); }
+  .set-row-text { flex: 1; min-width: 0; }
+  .set-row-title { font-size: 14px; font-weight: 400; color: var(--text-main); }
+  .set-row-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── Settings: About / Credits ────────────────────────────────────── */
+  .credits { padding: 4px 14px 14px; }
+  .credits-line { font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+  .credits-em { color: var(--text-main); font-weight: 500; }
+  .credits-muted { margin-top: 8px; opacity: 0.7; font-size: 11px; }
+
+  .input-group { margin-bottom: 20px; }
+  .input-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
+  .input-group input { 
+    width: 100%; background: rgba(0,0,0,0.25); border: 1px solid var(--border); 
+    color: var(--text-main); border-radius: 8px; padding: 12px 14px; font-size: 15px; outline: none; 
+    transition: border-color 0.2s;
+  }
+  .input-group input:focus { border-color: var(--primary); }
+  .input-modern input { width: 100%; background: transparent; border: none; border-bottom: 2px solid rgba(255,255,255,0.1); color: var(--text-main); padding: 12px 0; font-size: 15px; outline: none; transition: all 0.3s ease; } .input-modern input:focus { border-bottom-color: var(--primary); } .input-modern input::placeholder { color: var(--text-muted); }
+  .input-modern.invalid input { border-bottom-color: var(--danger); }
+  .input-modern.invalid input:focus { border-bottom-color: var(--danger); }
+  .field-error {
+    color: var(--danger); font-size: 12px; margin-top: 6px; min-height: 0;
+    max-height: 0; overflow: hidden; opacity: 0;
+    transition: opacity 0.16s ease, max-height 0.16s ease, margin-top 0.16s ease;
+  }
+  .input-modern.invalid + .field-error {
+    max-height: 32px; opacity: 1;
+  }
+  .input-modern select {
+    width: 100%; background: var(--bg-panel); border: none;
+    border-bottom: 2px solid rgba(255,255,255,0.1); color: var(--text-main);
+    padding: 12px 0; font-size: 15px; outline: none;
+  }
+  .input-modern select:focus { border-bottom-color: var(--primary); }
+  .adv-label {
+    display: block; font-size: 12.5px; color: var(--text-muted);
+    margin: 0 0 6px; font-weight: 500; line-height: 1.35; min-height: 34px;
+  }
+  .adv-field { margin-bottom: 18px; display: flex; flex-direction: column; }
+  .adv-field .adv-label { flex: 1; display: flex; align-items: flex-end; }
+  /* Denser inputs inside the advanced grid so more fits per column. */
+  .advanced-column .input-modern input,
+  .advanced-column .input-modern select { font-size: 13.5px; padding: 9px 0; }
+  .adv-toggles {
+    display: grid; grid-template-columns: minmax(0, 1fr);
+    gap: 6px 22px; margin-top: 8px;
+  }
+  .adv-checkbox {
+    display: flex; align-items: center; gap: 8px; font-size: 13px;
+    color: var(--text-main); margin-top: 10px; cursor: pointer; user-select: none;
+    line-height: 1.3;
+  }
+  .adv-toggles .adv-checkbox { margin-top: 4px; }
+  .adv-checkbox input { width: 16px; height: 16px; accent-color: var(--primary); flex-shrink: 0; }
+  #err-advanced { color: var(--danger); font-size: 12.5px; }
+  .advanced-column > h3 { margin-bottom: 18px !important; }
+
+  /* Modal keeps a FIXED height; the advanced column scrolls internally so
+     toggling it never resizes the popup. */
+  #add-profile-modal .modal {
+    height: 580px; max-height: calc(100vh - 48px); width: 480px;
+    display: flex; flex-direction: column;
+    transition: width 0.22s ease;
+  }
+  /* When Advanced is shown the popup grows much wider and the advanced column
+     gets the lion's share of the space. */
+  #add-profile-modal.wide .modal { width: 860px; }
+  #modal-columns { flex: 1; min-height: 0; }
+  #modal-columns > div { min-height: 0; }
+  #add-profile-modal.wide #advanced-column { flex: 1.4; }
+  .advanced-column { display: flex; flex-direction: column; min-height: 0; }
+  /* Advanced fields lay out in responsive columns for more breathing room. */
+  .adv-fields {
+    display: grid; grid-template-columns: minmax(0, 1fr);
+    column-gap: 22px; align-content: start;
+  }
+  .adv-fields > .adv-full { grid-column: 1 / -1; }
+  .advanced-scroll {
+    overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0;
+    padding-right: 10px; margin-right: -10px;
+  }
+  .advanced-scroll::-webkit-scrollbar { width: 6px; }
+  .advanced-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+
+  .btn-adv-toggle {
+    margin-top: 28px; background: none; border: none; cursor: pointer;
+    color: var(--primary); font-size: 13px; font-weight: 600; padding: 0;
+    text-align: left;
+  }
+  .btn-adv-toggle:hover { text-decoration: underline; }
+
+  /* Title bar: heading on the left, compact flag badge on the right. */
+  .modal-titlebar {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 30px;
+  }
+  .modal-titlebar h2 { flex: 1; font-size: 22px !important; }
+
+  /* Country flag preview inside the add-profile modal (flag + name only). */
+  .flag-preview { display: flex; align-items: center; gap: 11px; order: 2; }
+  .flag-preview-img {
+    width: 42px; height: 31px; border-radius: 5px; object-fit: cover;
+    border: 1px solid var(--border); background: rgba(0,0,0,0.2);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.35); flex-shrink: 0;
+  }
+  .flag-preview-name { font-size: 14px; font-weight: 600; color: var(--text-main); line-height: 1.2; }
+  
+  .icon-selector { display: flex; gap: 12px; margin-top: 8px; }
+  .icon-option { width: 44px; height: 44px; border-radius: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); transition: all 0.2s; }
+  .icon-option:hover { color: var(--text-main); background: rgba(255,255,255,0.05); }
+  .icon-option.active { color: var(--primary); border-color: var(--primary); background: var(--primary-dim); }
+  .icon-option svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 1.5; fill: none; }
+
+  .modal-actions { display: flex; gap: 16px; margin-top: 32px; }
+  .btn { padding: 12px 20px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; border: 1px solid transparent; flex: 1; transition: all 0.2s; }
+  .btn-secondary { background: rgba(255,255,255,0.05); color: var(--text-main); }
+  .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+  .btn-primary { background: var(--primary); color: #000; }
+  .btn-primary:hover { background: #60a5fa; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+  .btn:disabled { opacity: 0.6; cursor: default; transform: none; box-shadow: none; }
+
+  .sidebar-logs {
+    flex: 1;
+    overflow-y: auto;
+    display: none;
+    flex-direction: column;
+    padding: 0 12px;
+  }
+  .sidebar-logs.active { display: flex; }
+  .sidebar-logs { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) transparent; }
+  .sidebar-logs::-webkit-scrollbar { width: 6px; }
+  .sidebar-logs::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-logs::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.18); border-radius: 999px;
+  }
+  .sidebar-logs::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+  .logs-container { flex: 1; font-family: 'Courier New', Courier, monospace; font-size: 13px; display: flex; flex-direction: column; gap: 8px; padding: 12px 0; }
+  .log-line { color: #d1d5db; word-break: break-all; line-height: 1.5; }
+  .log-time { color: #6b7280; margin-right: 8px; }
+  .log-info { color: #60a5fa; font-weight: 500; }
+  .log-error { color: #ef4444; font-weight: 500; }
+
+  .sidebar-stats {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+    padding: 12px;
+    gap: 12px;
+  }
+  .sidebar-stats.active { display: flex; }
+  .stat-block {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* Chart blocks (speed + latency) grow to fill the sidebar evenly */
+  .stat-block.grow { flex: 1; }
+  .stat-block-title {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .stat-block-value {
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text-main);
+  }
+  .stat-block-chart {
+    flex: 1;
+    min-height: 40px;
+    margin-top: 10px;
+    width: 100%;
+    position: relative;
+  }
+  .stat-block-chart svg { width: 100%; height: 100%; display: block; }
+
+  .sidebar-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    margin-top: auto;
+  }
+
+  /* Custom themed checkbox — matches the app's blue accent */
+  input[type="checkbox"].checkbox {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    margin: 0;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    position: relative;
+    transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  input[type="checkbox"].checkbox:hover { border-color: rgba(59, 130, 246, 0.6); }
+  input[type="checkbox"].checkbox:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--primary-dim);
+  }
+  input[type="checkbox"].checkbox:checked {
+    background: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.35);
+  }
+  /* CSS-drawn checkmark */
+  input[type="checkbox"].checkbox::after {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 3px;
+    width: 6px;
+    height: 11px;
+    border: solid #0b0b0d;
+    border-width: 0 2.5px 2.5px 0;
+    border-radius: 1px;
+    transform: rotate(45deg) scale(0);
+    opacity: 0;
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.12s ease;
+  }
+  input[type="checkbox"].checkbox:checked::after {
+    transform: rotate(45deg) scale(1);
+    opacity: 1;
+  }
+  /* clickable label rows for checkboxes */
+  .check-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  /* ── Toggle switch (used in the NetShield panel) ──────────────────── */
+  .switch { position: relative; display: inline-block; width: 44px; height: 26px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch .slider {
+    position: absolute; inset: 0; cursor: pointer;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .switch .slider::before {
+    content: ''; position: absolute;
+    height: 18px; width: 18px; left: 3px; top: 3px;
+    background: #f3f4f6; border-radius: 50%;
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+  .switch input:checked + .slider {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+  .switch input:checked + .slider::before { transform: translateX(18px); }
+  .switch input:focus-visible + .slider { box-shadow: 0 0 0 3px var(--primary-dim); }
+
+  /* Map overlay (aesthetic only) */
+  .map-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background-image: radial-gradient(rgba(255,255,255,0.15) 1.5px, transparent 1.5px);
+    background-size: 32px 32px;
+    background-position: center center;
+    opacity: 0.5; pointer-events: none;
+    -webkit-mask-image: radial-gradient(ellipse at center, rgba(0,0,0,1) 15%, rgba(0,0,0,0) 75%);
+    mask-image: radial-gradient(ellipse at center, rgba(0,0,0,1) 15%, rgba(0,0,0,0) 75%);
+    display: none;
+  }
+
+  /* ── Modals: never taller than the viewport ───────────────────────── */
+  .modal {
+    max-width: min(640px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+  .modal::-webkit-scrollbar { width: 6px; }
+  .modal::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+  .settings-body { max-height: calc(100vh - 140px); overflow-y: auto; }
+
+  /* ── Responsive breakpoints ───────────────────────────────────────── */
+
+  /* Large desktops: give the connect control a touch more room */
+  @media (min-width: 1600px) {
+    :root { --sidebar-w: 340px; --ui-scale: 1; }
+  }
+
+  /* Small laptops / narrow windows */
+  @media (max-width: 1100px) {
+    :root { --sidebar-w: 248px; --ui-scale: 0.9; }
+    .stats-panel { flex-wrap: wrap; }
+    .stats-panel .stat-box { flex: 1 1 30%; }
+  }
+
+  /* Tablet-ish: collapse the profile modal to a single column */
+  @media (max-width: 860px) {
+    :root { --sidebar-w: 212px; }
+    .right-sidebar { width: 72px; padding: 20px 0; gap: 22px; }
+    .right-sidebar .tool-btn svg { width: 22px; height: 22px; }
+    .modal { padding: 24px; }
+    .modal > .modal-split { flex-direction: column; gap: 24px !important; }
+  }
+
+  /* Phone-width / very small windows: stack the whole layout vertically */
+  @media (max-width: 680px) {
+    #app { flex-direction: column; }
+    .sidebar {
+      width: 100%;
+      max-height: 40vh;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+    .right-sidebar {
+      width: 100%;
+      flex-direction: row;
+      justify-content: space-around;
+      padding: 10px 8px;
+      gap: 8px;
+      border-left: none;
+      border-top: 1px solid var(--border);
+      order: 3;
+    }
+    .right-sidebar .tool-btn { width: auto; font-size: 10px; }
+    .right-sidebar #btn-settings { margin-top: 0 !important; }
+    .main-area { order: 2; }
+    .stats-panel { padding: 14px 16px; }
+    .server-flag-large { width: 52px; height: 40px; }
+  }
+
+  /* Short viewports: shrink vertical paddings so nothing clips */
+  @media (max-height: 640px) {
+    .top-section { padding-top: 16px; }
+    .server-flag-large { margin-bottom: 10px; }
+    .server-subtitle { margin-bottom: 12px; }
+    .connect-target { --ring: clamp(180px, 42vh, 300px); }
+  }
+</style>
+</head>
+<body>
+  <div class="titlebar">
+    <div class="titlebar-drag" data-tauri-drag-region>
+      <span class="titlebar-logo">
+        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+      </span>
+      <span class="titlebar-title">OpenConnect</span>
+    </div>
+    <div class="titlebar-buttons">
+      <button class="tb-btn" id="tb-minimize" title="Minimize" aria-label="Minimize window">
+        <svg viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6"></line></svg>
+      </button>
+      <button class="tb-btn" id="tb-maximize" title="Maximize" aria-label="Maximize window">
+        <svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1"></rect></svg>
+      </button>
+      <button class="tb-btn tb-close" id="tb-close" title="Close" aria-label="Close window">
+        <svg viewBox="0 0 12 12"><line x1="3" y1="3" x2="9" y2="9"></line><line x1="9" y1="3" x2="3" y2="9"></line></svg>
+      </button>
+    </div>
+  </div>
+  <div id="app">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <div class="nav-tabs" style="margin-top: 8px;">
+        <div class="nav-tab active" id="nav-profiles" role="button" tabindex="0" aria-label="Show profiles">Profiles</div>
+        <div class="nav-tab" id="nav-logs" role="button" tabindex="0" aria-label="Show logs">Logs</div>
+        <div class="nav-tab" id="nav-stats" role="button" tabindex="0" aria-label="Show stats">Stats</div>
+      </div>
+
+      <div class="profile-list active" id="profile-list">
+        <!-- Profiles injected here -->
+      </div>
+      
+      <div class="sidebar-logs" id="sidebar-logs">
+        <div class="logs-container" id="logs-container">
+          <div class="log-line"><span class="log-time">[System]</span><span class="log-info">[INFO]</span> Ready.</div>
+        </div>
+      </div>
+      
+      <div class="sidebar-stats" id="sidebar-stats">
+        <div class="stat-block">
+          <div class="stat-block-title">Data Usage</div>
+          <div style="display: flex; justify-content: space-between; margin-top: 12px;">
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">DOWNLOAD</div>
+              <div class="stat-block-value" id="stats-dl-total">0 MB</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">UPLOAD</div>
+              <div class="stat-block-value" id="stats-ul-total">0 MB</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="stat-block grow">
+          <div class="stat-block-title">Network Speed</div>
+          <div style="display: flex; justify-content: space-between; margin-top: 12px;">
+            <div>
+              <div style="font-size: 11px; color: rgba(59, 130, 246, 0.8); margin-bottom: 4px;">↓ DL SPEED</div>
+              <div class="stat-block-value" id="stats-dl-speed" style="font-size: 18px;">0.00 KB/s</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; color: rgba(96, 165, 250, 0.8); margin-bottom: 4px;">↑ UL SPEED</div>
+              <div class="stat-block-value" id="stats-ul-speed" style="font-size: 18px;">0.00 KB/s</div>
+            </div>
+          </div>
+          <div class="stat-block-chart">
+            <svg viewBox="0 0 200 80" preserveAspectRatio="none">
+              <!-- Download line -->
+              <polyline id="chart-dl-line" fill="none" stroke="rgba(59, 130, 246, 0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points=""/>
+              <!-- Upload line -->
+              <polyline id="chart-ul-line" fill="none" stroke="rgba(96, 165, 250, 0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points=""/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="stat-block grow">
+          <div class="stat-block-title">Latency (Ping)</div>
+          <div style="display: flex; align-items: baseline; gap: 8px; margin-top: 8px;">
+            <div class="stat-block-value" id="stats-ping-current" style="font-size: 22px;">0</div>
+            <div style="font-size: 13px; color: var(--text-muted);">ms</div>
+          </div>
+          <div class="stat-block-chart">
+            <svg viewBox="0 0 200 72" preserveAspectRatio="none">
+              <!-- Ping line -->
+              <polyline id="chart-ping-line" fill="none" stroke="rgba(167, 139, 250, 0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points=""/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-add-profile" id="btn-add-profile">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Create New Profile
+      </button>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-area">
+      <div class="map-overlay"></div>
+      
+      <div class="top-section">
+        <img class="server-flag-large" id="large-flag" src="flags/4x3/xx.svg" alt="Country flag">
+        <h2 class="server-title" id="current-server-title">Select a Profile</h2>
+        <div class="server-subtitle" id="current-server-subtitle">No profile selected</div>
+      </div>
+
+      <div class="connection-center">
+        <!-- Interactive map pin / target -->
+        <div class="connect-target" id="connect-target" role="button" tabindex="0" aria-label="Connect or disconnect VPN">
+          <div class="ring outer"></div>
+          <div class="ring inner"></div>
+          <div class="core" id="pulse-core">CONNECT</div>
+        </div>
+      </div>
+
+      <!-- Stats Panel -->
+      <div class="stats-panel">
+        <div class="stat-box">
+          <div class="stat-header">Status</div>
+          <div class="stat-value">
+            <div class="status-indicator" id="status-indicator"></div>
+            <span id="stat-status">Disconnected</span>
+          </div>
+        </div>
+        
+        <div class="stat-box">
+          <div class="stat-header">VPN IP</div>
+          <div class="stat-value" id="stat-ip">---</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-header">Duration</div>
+          <div class="stat-value" id="stat-timer">00:00:00</div>
+        </div>
+
+        <div class="stat-box">
+          <div class="stat-header">Ping</div>
+          <div class="stat-value" id="stat-ping">0ms</div>
+        </div>
+      </div>
+      
+      <!-- Logs removed from here and moved to sidebar -->
+    </main>
+
+    <!-- Right Sidebar (Tools) -->
+    <aside class="right-sidebar">
+      <div class="ns-anchor">
+        <button class="tool-btn" id="btn-netshield" aria-label="Toggle NetShield">
+          <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          NetShield
+        </button>
+        <div class="ns-flyout" id="ns-flyout">
+          <button class="ns-fly-item" id="ns-fly-malware" data-target="ns-block-malware">
+            <span class="ns-fly-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V5l-8-3z"></path><path d="m9 12 2 2 4-4"></path></svg>
+            </span>
+            <span class="ns-fly-label">Malware</span>
+          </button>
+          <button class="ns-fly-item" id="ns-fly-secure" data-target="ns-secure-connection">
+            <span class="ns-fly-icon">
+              <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </span>
+            <span class="ns-fly-label">Secure</span>
+          </button>
+          <button class="ns-fly-item" id="ns-fly-ads" data-target="ns-block-ads">
+            <span class="ns-fly-icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>
+            </span>
+            <span class="ns-fly-label">Ads</span>
+          </button>
+        </div>
+      </div>
+      <button class="tool-btn" id="btn-killswitch" aria-label="Toggle Kill Switch">
+        <svg viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+        Kill Switch
+      </button>
+      <button class="tool-btn" id="btn-autoretry" aria-label="Toggle Auto Retry">
+        <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+        Auto Retry
+      </button>
+      <button class="tool-btn" id="btn-settings" style="margin-top: auto;" aria-label="Open settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        Settings
+      </button>
+    </aside>
+
+    <!-- Modals -->
+    <div id="add-profile-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="New Connection Profile">
+      <div class="modal">
+        <div class="modal-titlebar">
+          <div class="flag-preview">
+            <img id="flag-preview-img" class="flag-preview-img" src="flags/4x3/xx.svg" alt="Country flag">
+            <div id="flag-preview-name" class="flag-preview-name">Unknown</div>
+          </div>
+          <h2 style="font-size: 24px; font-weight: 500; letter-spacing: -0.5px; margin: 0;">New Connection Profile</h2>
+        </div>
+
+        <div class="modal-split" id="modal-columns" style="display: flex; gap: 32px;">
+          <!-- Left: Details (Identity + Server + Credentials) -->
+          <div style="flex: 1;">
+            <h3 style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Profile Details</h3>
+            <div class="input-modern">
+              <input type="text" id="input-name" placeholder="Profile Name (e.g. Workspace)" autocomplete="off">
+            </div>
+            <div class="field-error" id="err-name"></div>
+            <div class="input-modern" style="margin-top: 24px;">
+              <input type="url" id="input-server" placeholder="Server URL (https://...)" autocomplete="off">
+            </div>
+            <div class="field-error" id="err-server"></div>
+            <div class="input-modern" style="margin-top: 24px;">
+              <input type="text" id="input-username" placeholder="Username" autocomplete="off">
+            </div>
+            <div class="field-error" id="err-username"></div>
+            <div class="input-modern" style="margin-top: 24px;">
+              <input type="password" id="input-password" placeholder="Password" autocomplete="off">
+            </div>
+            <div class="field-error" id="err-password"></div>
+            <button type="button" id="btn-toggle-advanced" class="btn-adv-toggle">Show Advanced options ›</button>
+          </div>
+
+          <!-- Right: Advanced (second column, hidden until toggled, scrolls) -->
+          <div id="advanced-column" class="advanced-column" style="flex: 1; display: none;">
+            <h3 style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Advanced (OpenConnect)</h3>
+            <div class="advanced-scroll">
+            <div class="adv-fields">
+              <div class="adv-field">
+                <label class="adv-label">Protocol</label>
+                <div class="input-modern">
+                  <select id="adv-protocol">
+                    <option value="">Default (AnyConnect)</option>
+                    <option value="anyconnect">AnyConnect / ocserv</option>
+                    <option value="nc">Juniper Network Connect</option>
+                    <option value="gp">GlobalProtect (PAN)</option>
+                    <option value="pulse">Pulse Connect Secure</option>
+                    <option value="f5">F5 BIG-IP</option>
+                    <option value="fortinet">FortiGate</option>
+                    <option value="array">Array Networks</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Token Mode (--token-mode)</label>
+                <div class="input-modern">
+                  <select id="adv-token-mode">
+                    <option value="">None (app TOTP)</option>
+                    <option value="totp">TOTP</option>
+                    <option value="hotp">HOTP</option>
+                    <option value="rsa">RSA SecurID</option>
+                    <option value="oidc">OIDC</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Auth Group / Realm (--authgroup)</label>
+                <div class="input-modern"><input type="text" id="adv-authgroup" autocomplete="off" placeholder="e.g. Employees"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">User Group URL path (--usergroup)</label>
+                <div class="input-modern"><input type="text" id="adv-usergroup" autocomplete="off" placeholder="/portal"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Client Certificate file (--certificate)</label>
+                <div class="input-modern"><input type="text" id="adv-certificate" autocomplete="off" placeholder="C:\path\client.pem"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">SSL Key file (--sslkey)</label>
+                <div class="input-modern"><input type="text" id="adv-sslkey" autocomplete="off" placeholder="C:\path\client.key"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Key Password (--key-password)</label>
+                <div class="input-modern"><input type="password" id="adv-key-password" autocomplete="off" placeholder="Stored in Credential Manager"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Token Secret (--token-secret)</label>
+                <div class="input-modern"><input type="password" id="adv-token-secret" autocomplete="off" placeholder="Stored in Credential Manager"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">External Browser (--external-browser)</label>
+                <div class="input-modern"><input type="text" id="adv-external-browser" autocomplete="off" placeholder="C:\...\chrome.exe"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Proxy URL (--proxy)</label>
+                <div class="input-modern"><input type="text" id="adv-proxy" autocomplete="off" placeholder="http://proxy:8080"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Proxy Auth methods (--proxy-auth)</label>
+                <div class="input-modern"><input type="text" id="adv-proxy-auth" autocomplete="off" placeholder="basic,ntlm"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Resolve HOST:IP (--resolve)</label>
+                <div class="input-modern"><input type="text" id="adv-resolve" autocomplete="off" placeholder="vpn.example.com:203.0.113.5"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">SNI hostname (--sni)</label>
+                <div class="input-modern"><input type="text" id="adv-sni" autocomplete="off" placeholder="front.example.com"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">CA File (--cafile)</label>
+                <div class="input-modern"><input type="text" id="adv-cafile" autocomplete="off" placeholder="C:\path\ca.pem"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Base MTU (--base-mtu)</label>
+                <div class="input-modern"><input type="number" id="adv-base-mtu" min="576" max="9000" autocomplete="off" placeholder="1400"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">DTLS local port (--dtls-local-port)</label>
+                <div class="input-modern"><input type="number" id="adv-dtls-local-port" min="1" max="65535" autocomplete="off" placeholder="4443"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Force DPD interval s (--force-dpd)</label>
+                <div class="input-modern"><input type="number" id="adv-force-dpd" min="1" max="3600" autocomplete="off" placeholder="30"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Queue length (--queue-len)</label>
+                <div class="input-modern"><input type="number" id="adv-queue-len" min="1" max="65535" autocomplete="off" placeholder="10"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">OS reported (--os)</label>
+                <div class="input-modern">
+                  <select id="adv-os-override">
+                    <option value="">Default (win)</option>
+                    <option value="win">win</option>
+                    <option value="linux">linux</option>
+                    <option value="linux-64">linux-64</option>
+                    <option value="mac-intel">mac-intel</option>
+                    <option value="android">android</option>
+                    <option value="apple-ios">apple-ios</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">User-Agent (--useragent)</label>
+                <div class="input-modern"><input type="text" id="adv-useragent" autocomplete="off"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Version string (--version-string)</label>
+                <div class="input-modern"><input type="text" id="adv-version-string" autocomplete="off"></div>
+              </div>
+
+              <div class="adv-field">
+                <label class="adv-label">Local hostname (--local-hostname)</label>
+                <div class="input-modern"><input type="text" id="adv-local-hostname" autocomplete="off"></div>
+              </div>
+
+              <div class="adv-field adv-full">
+                <label class="adv-label">DTLS ciphers (--dtls-ciphers)</label>
+                <div class="input-modern"><input type="text" id="adv-dtls-ciphers" autocomplete="off"></div>
+              </div>
+
+              <div class="adv-full adv-toggles">
+                <label class="adv-checkbox"><input type="checkbox" id="adv-no-external-auth"> Refuse external-browser auth (--no-external-auth)</label>
+                <label class="adv-checkbox"><input type="checkbox" id="adv-no-proxy"> Disable proxy (--no-proxy)</label>
+                <label class="adv-checkbox"><input type="checkbox" id="adv-no-system-trust"> Disable system trust (--no-system-trust)</label>
+                <label class="adv-checkbox"><input type="checkbox" id="adv-allow-insecure-crypto"> Allow insecure crypto (--allow-insecure-crypto)</label>
+                <label class="adv-checkbox"><input type="checkbox" id="adv-no-dtls"> Disable DTLS/ESP (--no-dtls)</label>
+                <label class="adv-checkbox"><input type="checkbox" id="adv-pfs"> Require PFS (--pfs)</label>
+                <label class="adv-checkbox"><input type="checkbox" id="adv-passtos"> Copy TOS/TCLASS (--passtos)</label>
+                <label class="adv-checkbox"><input type="checkbox" id="adv-disable-ipv6"> Disable IPv6 (--disable-ipv6)</label>
+                <label class="adv-checkbox"><input type="checkbox" id="adv-deflate"> Enable compression (--deflate)</label>
+              </div>
+
+              <div class="adv-full" id="err-advanced" style="margin-top: 12px;"></div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 48px;">
+          <button id="btn-cancel-modal" class="btn btn-secondary">Cancel</button>
+          <button id="btn-save-modal" class="btn btn-primary">Save Profile</button>
+        </div>
+      </div>
+    </div>
+    
+      <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Settings">
+        <div class="settings-screen">
+          <div class="settings-header">
+            <h2>Settings</h2>
+            <button id="btn-close-settings" class="btn-icon"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+          </div>
+          <div class="settings-body">
+            <div class="set-section-title">General</div>
+            <div class="set-row">
+              <div class="set-row-text">
+                <div class="set-row-title">Auto-connect on launch</div>
+                <div class="set-row-sub">Connect to the last-used profile automatically</div>
+              </div>
+              <span class="switch"><input type="checkbox" id="set-auto-connect"><span class="slider"></span></span>
+            </div>
+
+            <div class="set-section-title">Engine</div>
+            <div class="set-row">
+              <div class="set-row-text">
+                <div class="set-row-title">OpenConnect Core</div>
+                <div class="set-row-sub" id="engine-version">Checking version&hellip;</div>
+              </div>
+            </div>
+
+            <div class="set-section-title">About</div>
+            <div class="set-row">
+              <div class="set-row-text">
+                <div class="set-row-title">OpenConnect GUI</div>
+                <div class="set-row-sub">Version 0.1.0</div>
+              </div>
+            </div>
+            <div class="credits">
+              <p class="credits-line">A modern desktop client for the OpenConnect VPN engine.</p>
+              <p class="credits-line">Built with Tauri &amp; Rust.</p>
+              <p class="credits-line">Powered by the open-source <span class="credits-em">OpenConnect</span> project (GPLv2).</p>
+              <p class="credits-line">DNS protection by <span class="credits-em">AdGuard DNS</span>.</p>
+              <p class="credits-line credits-muted">&copy; 2026 OpenConnect GUI. All rights reserved.</p>
+            </div>
+
+            <input type="hidden" id="set-default-protocol" value="OpenConnect">
+          </div>
+        </div>
+      </div>
+
+      <!-- NetShield state (hidden inputs backing the sidebar fly-out) -->
+      <div id="netshield-state" style="display: none;">
+        <input type="checkbox" id="ns-block-malware">
+        <input type="checkbox" id="ns-secure-connection">
+        <input type="checkbox" id="ns-block-ads">
+      </div>
+
+      <!-- MFA prompt -->
+      <div id="mfa-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Authentication Required">
+        <div class="modal">
+          <h2 style="font-size: 22px; margin-bottom: 8px; font-weight: 600;">Authentication Required</h2>
+          <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 24px;"> Enter the code for <span id="mfa-profile-name" style="color: var(--text-main);"></span>.</p>
+          <div class="input-modern">
+            <input type="text" id="mfa-code-input" placeholder="Code" autocomplete="off" inputmode="numeric">
+          </div>
+          <div class="modal-actions">
+            <button id="btn-mfa-submit" class="btn btn-primary">Submit</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Server certificate trust -->
+      <div id="cert-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="New Server Certificate">
+        <div class="modal">
+          <h2 style="font-size: 22px; margin-bottom: 8px; font-weight: 600;">New Server Certificate</h2>
+          <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;"> The server presented an untrusted certificate. Trust and pin it to connect securely?</p>
+          <div id="cert-pin" style="font-family: 'Courier New', monospace; font-size: 12px; word-break: break-all; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; color: var(--primary); margin-bottom: 24px;"></div>
+          <div class="modal-actions">
+            <button id="btn-cert-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="btn-cert-trust" class="btn btn-primary">Trust &amp; Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+  <script src="app.js"></script>
+</body>
+</html>
