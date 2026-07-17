@@ -457,16 +457,11 @@ pub fn build_openconnect_args(profile: &ConnectionProfile) -> Vec<String> {
     args.push("--reconnect-timeout".to_string());
     args.push("60".to_string());
     // Dead-peer detection / keepalive. Default 30s, overridable via --force-dpd.
-    // When the user sets an explicit interval we use --force-dpd (which forces
-    // the DPD timer even if the server did not advertise one); otherwise keep
-    // the built-in --dpd 30 keepalive.
-    if let Some(dpd) = profile.force_dpd {
-        args.push("--force-dpd".to_string());
-        args.push(dpd.to_string());
-    } else {
-        args.push("--dpd".to_string());
-        args.push("30".to_string());
-    }
+    // openconnect only exposes --force-dpd (there is no --dpd option); it forces
+    // the DPD timer even if the server did not advertise one.
+    let dpd = profile.force_dpd.unwrap_or(30);
+    args.push("--force-dpd".to_string());
+    args.push(dpd.to_string());
 
     // ── Authentication options ──────────────────────────────────────────────
     if let Some(ref g) = profile.authgroup {

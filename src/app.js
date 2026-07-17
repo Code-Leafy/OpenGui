@@ -447,6 +447,42 @@
       logsContainer.scrollTop = logsContainer.scrollHeight;
     }
 
+    // Copy all visible log lines to the clipboard.
+    (function wireCopyLogs() {
+      const btn = document.getElementById('btn-copy-logs');
+      if (!btn) return;
+      const label = document.getElementById('btn-copy-logs-label');
+      btn.addEventListener('click', async () => {
+        const lines = Array.from(logsContainer.querySelectorAll('.log-line'))
+          .map((el) => el.textContent.replace(/\s+/g, ' ').trim())
+          .join('\n');
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(lines);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = lines;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          }
+          btn.classList.add('copied');
+          if (label) label.textContent = 'Copied';
+          setTimeout(() => {
+            btn.classList.remove('copied');
+            if (label) label.textContent = 'Copy';
+          }, 1500);
+        } catch (err) {
+          console.error('copy logs failed', err);
+          if (label) label.textContent = 'Failed';
+          setTimeout(() => { if (label) label.textContent = 'Copy'; }, 1500);
+        }
+      });
+    })();
+
     function applySettingsToUI() {
       if (!settings) return;
       setToolActive('btn-netshield', settings.netshield_enabled);

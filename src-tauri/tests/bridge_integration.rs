@@ -155,8 +155,8 @@ fn args_set_dpd() {
     let args = build_openconnect_args(&profile(None));
     let idx = args
         .iter()
-        .position(|a| a == "--dpd")
-        .expect("dpd present");
+        .position(|a| a == "--force-dpd")
+        .expect("force-dpd present");
     assert_eq!(args[idx + 1], "30");
 }
 
