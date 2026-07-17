@@ -26,9 +26,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+          cache-on-failure: true
 
       - name: Build, sign, and publish release
         uses: tauri-apps/tauri-action@v0
