@@ -1702,6 +1702,12 @@ pub fn get_connection_state(
     manager.get_state()
 }
 
+/// Get the tunnel's assigned local IP (empty string if not connected).
+#[tauri::command]
+pub fn get_tunnel_ip(manager: tauri::State<'_, Arc<ProcessManager>>) -> String {
+    manager.get_tunnel_ip()
+}
+
 // ── Global settings & tool toggles ────────────────────────────────────────────
 
 use crate::settings::{AppSettings, NetShieldConfig};

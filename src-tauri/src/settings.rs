@@ -72,6 +72,12 @@ pub struct AppSettings {
     /// Selected default protocol label ("OpenConnect" | "WireGuard").
     #[serde(default = "default_protocol")]
     pub default_protocol: String,
+    /// Minimize the window to the tray instead of quitting when it is closed.
+    #[serde(default = "default_true")]
+    pub minimize_on_close: bool,
+    /// Automatically check for (and install) updates on startup.
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
 }
 
 impl Default for AppSettings {
@@ -85,6 +91,8 @@ impl Default for AppSettings {
             auto_connect: false,
             last_profile_id: None,
             default_protocol: "OpenConnect".to_string(),
+            minimize_on_close: true,
+            auto_update: true,
         }
     }
 }

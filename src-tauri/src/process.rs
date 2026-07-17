@@ -895,6 +895,12 @@ impl ProcessManager {
         self.state.lock().clone()
     }
 
+    /// Return the tunnel's assigned local IP, or an empty string if the tunnel
+    /// is not up (or the IP has not been observed yet).
+    pub fn get_tunnel_ip(&self) -> String {
+        self.tunnel_ip.lock().clone()
+    }
+
     /// Write a string to the openconnect process stdin.
     ///
     /// Used by `submit_mfa` to send a manual MFA code after the process is running.

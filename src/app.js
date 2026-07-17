@@ -215,6 +215,22 @@
       renderState();
 
       maybeAutoConnect();
+      maybeAutoUpdate();
+    }
+
+    // On startup, if auto-update is enabled (default), check for a newer signed
+    // release and install it silently. Failures are logged but never block the UI.
+    async function maybeAutoUpdate() {
+      if (settings && settings.auto_update === false) return;
+      try {
+        const info = await backend.invoke('check_for_update');
+        if (info && info.available) {
+          addLog(Date.now(), 'INFO', `Update v${info.version} found; installing on startup.`);
+          await backend.invoke('install_update');
+        }
+      } catch (err) {
+        console.error('startup update check failed', err);
+      }
     }
 
     // Auto-connect to the last-used profile on launch, if enabled in Settings
@@ -260,11 +276,21 @@
 
     function startTimer() {
       if (timerInterval) return;
-      connectionStartTime = Date.now();
+      if (connectionStartTime === null) connectionStartTime = Date.now();
       renderTimer();
-      timerInterval = setInterval(() => {
-        if (sidebarStatsEl.classList.contains('active')) renderTimer();
-      }, 1000);
+      timerInterval = setInterval(renderTimer, 1000);
+    }
+
+    // Fetch the tunnel's assigned IP from the backend. Covers the cases where
+    // the tunnel-info event was missed (e.g. the app restored an already-open
+    // connection on launch).
+    async function refreshTunnelIp() {
+      try {
+        const ip = await backend.invoke('get_tunnel_ip');
+        if (ip && getSimpleState() === 'Connected') statIp.textContent = ip;
+      } catch (err) {
+        console.error('get_tunnel_ip failed', err);
+      }
     }
 
     function stopTimer() {
@@ -324,6 +350,7 @@
         statStatus.textContent = 'Protected';
         startTimer();
         startPing();
+        refreshTunnelIp();
         if (sidebarStatsEl.classList.contains('active')) startStatsLoop();
       } else if (stateStr === 'Connecting') {
         pulseCore.textContent = 'Cancel';
@@ -505,6 +532,10 @@
 
       document.getElementById('set-auto-connect').checked = !!settings.auto_connect;
       document.getElementById('set-default-protocol').value = settings.default_protocol || 'OpenConnect';
+      const minClose = document.getElementById('set-minimize-on-close');
+      if (minClose) minClose.checked = settings.minimize_on_close !== false;
+      const autoUpd = document.getElementById('set-auto-update');
+      if (autoUpd) autoUpd.checked = settings.auto_update !== false;
     }
 
     function setToolActive(id, active) {
@@ -1144,12 +1175,46 @@
         if (!settings) settings = {};
         settings.auto_connect = document.getElementById('set-auto-connect').checked;
         settings.default_protocol = document.getElementById('set-default-protocol').value;
+        settings.minimize_on_close = document.getElementById('set-minimize-on-close').checked;
+        settings.auto_update = document.getElementById('set-auto-update').checked;
         backend.invoke('set_settings', { settings }).catch((err) => {
           console.error('set_settings failed', err);
           addLog(Date.now(), 'ERROR', 'Failed to save settings: ' + String(err));
         });
       };
       document.getElementById('set-auto-connect').onchange = persistSettings;
+      document.getElementById('set-minimize-on-close').onchange = persistSettings;
+      document.getElementById('set-auto-update').onchange = persistSettings;
+
+      // --- Check for updates ---
+      const btnCheckUpdates = document.getElementById('btn-check-updates');
+      const updateStatusEl = document.getElementById('update-status');
+      btnCheckUpdates.onclick = async () => {
+        if (btnCheckUpdates.disabled) return;
+        btnCheckUpdates.disabled = true;
+        const prev = btnCheckUpdates.textContent;
+        btnCheckUpdates.textContent = 'Checking…';
+        updateStatusEl.textContent = 'Checking for updates…';
+        try {
+          const info = await backend.invoke('check_for_update');
+          if (info && info.available) {
+            updateStatusEl.textContent = `Update available: v${info.version}. Installing…`;
+            btnCheckUpdates.textContent = 'Updating…';
+            addLog(Date.now(), 'INFO', `Update v${info.version} available; downloading.`);
+            await backend.invoke('install_update');
+          } else {
+            updateStatusEl.textContent = `You are on the latest version (${(info && info.current_version) || '0.1.2'}).`;
+            btnCheckUpdates.textContent = prev;
+            btnCheckUpdates.disabled = false;
+          }
+        } catch (err) {
+          console.error('update check failed', err);
+          updateStatusEl.textContent = 'Update check failed: ' + String(err);
+          addLog(Date.now(), 'ERROR', 'Update check failed: ' + String(err));
+          btnCheckUpdates.textContent = prev;
+          btnCheckUpdates.disabled = false;
+        }
+      };
 
       // --- OpenConnect engine: version display only ---------------------
       const engineVersionEl = document.getElementById('engine-version');

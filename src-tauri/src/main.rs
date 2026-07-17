@@ -105,12 +105,30 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            // Close-to-tray: hide the window instead of quitting, so the VPN
-            // connection keeps running in the background. Use "Quit" from the
-            // tray menu to actually exit.
+            // Close-to-tray: when "minimize on close" is enabled (the default),
+            // hide the window instead of quitting so the VPN keeps running in
+            // the background. When disabled, close actually exits the app.
             WindowEvent::CloseRequested { api, .. } => {
-                api.prevent_close();
-                let _ = window.hide();
+                let app = window.app_handle();
+                let minimize = app
+                    .path()
+                    .app_data_dir()
+                    .ok()
+                    .map(|dir| {
+                        openconnect_gui_lib::settings::load_settings(&dir)
+                            .unwrap_or_default()
+                            .minimize_on_close
+                    })
+                    .unwrap_or(true);
+                if minimize {
+                    api.prevent_close();
+                    let _ = window.hide();
+                } else {
+                    if let Some(mgr) = app.try_state::<Arc<ProcessManager>>() {
+                        mgr.kill_if_running();
+                    }
+                    app.exit(0);
+                }
             }
             // Minimise-to-tray: hide the window when it is minimised (Windows
             // sends a Resized event with a zero-area size when minimising;
@@ -130,6 +148,7 @@ fn main() {
             openconnect_gui_lib::commands::connect,
             openconnect_gui_lib::commands::disconnect,
             openconnect_gui_lib::commands::get_connection_state,
+            openconnect_gui_lib::commands::get_tunnel_ip,
             openconnect_gui_lib::commands::submit_mfa,
             openconnect_gui_lib::commands::bridge_version,
             openconnect_gui_lib::commands::openconnect_version,

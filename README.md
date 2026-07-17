@@ -74,6 +74,28 @@ Automatically re-establish a dropped connection, and keep the app current with a
 
 ---
 
+## Lightweight by Design
+
+OpenGui is built with Tauri 2 — a Rust backend paired with a dependency-free static frontend rendered by the OS's own WebView. There is no bundled Chromium, no Node runtime, and no heavyweight framework, so the app stays tiny both on disk (~10 MB installer) and in memory while running.
+
+<div align="center">
+
+<img src="assets/taskmanager.png" alt="OpenGui resource usage in Windows Task Manager" width="620" style="border-radius: 12px; border: 1px solid rgba(0,0,0,0.05);">
+
+</div>
+
+<br>
+
+As the Task Manager snapshot above shows, OpenGui sits idle at a **negligible CPU footprint** and only a **few megabytes of RAM** — a fraction of what an Electron-based client (which ships an entire browser per app) would consume. That means:
+
+- **No background bloat** — it stays out of the way while your tunnel runs.
+- **Instant startup** — the native WebView loads immediately, no cold-start JIT warm-up.
+- **Runs anywhere** — comfortable even on low-spec laptops and virtual machines.
+
+You get a full-featured VPN client that behaves like a small system utility, not a resource-hungry desktop app.
+
+---
+
 ## Getting Started
 
 ### Install (Recommended)

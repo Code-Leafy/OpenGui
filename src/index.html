@@ -16,6 +16,9 @@
     --text-muted: #9ca3af;
     --border: rgba(255, 255, 255, 0.08);
     --danger: #ef4444;
+    /* Connected / protected accent (green) */
+    --success: #22c55e;
+    --success-dim: rgba(34, 197, 94, 0.2);
     /* Shield / security accent (kept distinct from the connect-blue) */
     --shield: #34d399;
     --shield-dim: rgba(52, 211, 153, 0.14);
@@ -336,10 +339,10 @@
   .connect-target.connecting .ring.inner { width: calc(var(--ring) * 0.425); height: calc(var(--ring) * 0.425); background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); }
   .connect-target.connecting .core { background: var(--primary); color: #fff; box-shadow: none; }
 
-  /* Connected state */
-  .connect-target.connected .ring.outer { width: var(--ring); height: var(--ring); background: rgba(59, 130, 246, 0.1); border-color: rgba(0,208,132,0.2); }
-  .connect-target.connected .ring.inner { width: calc(var(--ring) * 0.575); height: calc(var(--ring) * 0.575); background: rgba(59, 130, 246, 0.2); border-color: rgba(0,208,132,0.4); }
-  .connect-target.connected .core { background: var(--primary-dim); color: var(--primary); border: 1px solid var(--primary); box-shadow: none; width: calc(var(--ring) * 0.82); height: calc(var(--ring) * 0.82); }
+  /* Connected state (green = protected) */
+  .connect-target.connected .ring.outer { animation: pulse-ring-green 2s infinite; width: var(--ring); height: var(--ring); background: var(--success-dim); border-color: rgba(34, 197, 94, 0.3); }
+  .connect-target.connected .ring.inner { width: calc(var(--ring) * 0.575); height: calc(var(--ring) * 0.575); background: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.4); }
+  .connect-target.connected .core { background: var(--success-dim); color: var(--success); border: 1px solid var(--success); box-shadow: none; width: calc(var(--ring) * 0.82); height: calc(var(--ring) * 0.82); }
 
   /* Disconnecting state */
   .connect-target.disconnecting .ring.outer { animation: pulse-ring-red 1s infinite; background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.2); }
@@ -359,6 +362,12 @@
   @keyframes pulse-ring-red {
     0% { width: var(--core); height: var(--core); opacity: 1; }
     100% { width: var(--ring); height: var(--ring); opacity: 0; }
+  }
+
+  @keyframes pulse-ring-green {
+    0% { transform: scale(0.92); opacity: 0.9; }
+    70% { transform: scale(1.08); opacity: 0; }
+    100% { transform: scale(0.92); opacity: 0; }
   }
 
   /* Stats Panel */
@@ -405,7 +414,7 @@
   }
   
   .status-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; transition: background 0.3s, box-shadow 0.3s; }
-  .status-indicator.connected { background: var(--primary); box-shadow: 0 0 10px var(--primary); }
+  .status-indicator.connected { background: var(--success); box-shadow: 0 0 10px var(--success); }
 
   /* Right Sidebar (Settings/Tools) */
   .right-sidebar {
@@ -604,7 +613,7 @@
   }
   /* When Advanced is shown the popup grows much wider and the advanced column
      gets the lion's share of the space. */
-  #add-profile-modal.wide .modal { width: 860px; }
+  #add-profile-modal.wide .modal { width: 860px; max-width: min(860px, calc(100vw - 32px)); }
   #modal-columns { flex: 1; min-height: 0; }
   #modal-columns > div { min-height: 0; }
   #add-profile-modal.wide #advanced-column { flex: 1.4; }
@@ -1311,6 +1320,29 @@
               </div>
               <span class="switch"><input type="checkbox" id="set-auto-connect"><span class="slider"></span></span>
             </div>
+            <div class="set-row">
+              <div class="set-row-text">
+                <div class="set-row-title">Minimize to tray on close</div>
+                <div class="set-row-sub">Keep the VPN running in the background when the window is closed</div>
+              </div>
+              <span class="switch"><input type="checkbox" id="set-minimize-on-close"><span class="slider"></span></span>
+            </div>
+
+            <div class="set-section-title">Updates</div>
+            <div class="set-row">
+              <div class="set-row-text">
+                <div class="set-row-title">Check for updates on startup</div>
+                <div class="set-row-sub">Automatically download and install new versions</div>
+              </div>
+              <span class="switch"><input type="checkbox" id="set-auto-update"><span class="slider"></span></span>
+            </div>
+            <div class="set-row">
+              <div class="set-row-text">
+                <div class="set-row-title">Check for updates now</div>
+                <div class="set-row-sub" id="update-status">You are on version 0.1.2</div>
+              </div>
+              <button id="btn-check-updates" class="btn btn-secondary" type="button">Check</button>
+            </div>
 
             <div class="set-section-title">Engine</div>
             <div class="set-row">
@@ -1324,7 +1356,7 @@
             <div class="set-row">
               <div class="set-row-text">
                 <div class="set-row-title">OpenGui</div>
-                <div class="set-row-sub">Version 0.1.1</div>
+                <div class="set-row-sub">Version 0.1.2</div>
               </div>
             </div>
             <div class="credits">
