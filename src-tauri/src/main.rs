@@ -71,7 +71,7 @@ fn main() {
             let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
             let mut builder = TrayIconBuilder::new()
-                .tooltip("OpenConnect GUI")
+                .tooltip("OpenGui")
                 .menu(&menu)
                 // Left-click should restore the window, not pop the menu.
                 .show_menu_on_left_click(false)

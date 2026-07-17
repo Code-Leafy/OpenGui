@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>OpenConnect VPN</title>
+<title>OpenGui</title>
 <style>
   :root {
     --bg-dark: #09090b;
@@ -174,6 +174,7 @@
   .profile-card:hover .profile-actions { display: flex; }
   .btn-icon { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
   .btn-icon:hover { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+  .btn-icon.btn-edit-profile:hover { color: var(--primary); background: var(--primary-dim); }
   .btn-icon svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
 
   .profile-card {
@@ -887,10 +888,7 @@
 <body>
   <div class="titlebar">
     <div class="titlebar-drag" data-tauri-drag-region>
-      <span class="titlebar-logo">
-        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-      </span>
-      <span class="titlebar-title">OpenConnect</span>
+      <span class="titlebar-title">OpenGui</span>
     </div>
     <div class="titlebar-buttons">
       <button class="tb-btn" id="tb-minimize" title="Minimize" aria-label="Minimize window">
@@ -1079,7 +1077,7 @@
             <img id="flag-preview-img" class="flag-preview-img" src="flags/4x3/xx.svg" alt="Country flag">
             <div id="flag-preview-name" class="flag-preview-name">Unknown</div>
           </div>
-          <h2 style="font-size: 24px; font-weight: 500; letter-spacing: -0.5px; margin: 0;">New Connection Profile</h2>
+          <h2 id="modal-heading" style="font-size: 24px; font-weight: 500; letter-spacing: -0.5px; margin: 0;">New Connection Profile</h2>
         </div>
 
         <div class="modal-split" id="modal-columns" style="display: flex; gap: 32px;">
@@ -1306,7 +1304,7 @@
             <div class="set-section-title">About</div>
             <div class="set-row">
               <div class="set-row-text">
-                <div class="set-row-title">OpenConnect GUI</div>
+                <div class="set-row-title">OpenGui</div>
                 <div class="set-row-sub">Version 0.1.0</div>
               </div>
             </div>
@@ -1315,7 +1313,7 @@
               <p class="credits-line">Built with Tauri &amp; Rust.</p>
               <p class="credits-line">Powered by the open-source <span class="credits-em">OpenConnect</span> project (GPLv2).</p>
               <p class="credits-line">DNS protection by <span class="credits-em">AdGuard DNS</span>.</p>
-              <p class="credits-line credits-muted">&copy; 2026 OpenConnect GUI. All rights reserved.</p>
+              <p class="credits-line credits-muted">&copy; 2026 OpenGui. All rights reserved.</p>
             </div>
 
             <input type="hidden" id="set-default-protocol" value="OpenConnect">

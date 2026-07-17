@@ -251,7 +251,7 @@ fn run_netsh(args: &[&str]) -> Result<(), String> {
     {
         return Err(
             "administrator privileges are required to configure the firewall. \
-             Run OpenConnect GUI as administrator to use the kill-switch."
+             Run OpenGui as administrator to use the kill-switch."
                 .to_string(),
         );
     }

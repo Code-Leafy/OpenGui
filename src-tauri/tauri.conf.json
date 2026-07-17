@@ -1,5 +1,5 @@
 {
-  "productName": "OpenConnect GUI",
+  "productName": "OpenGui",
   "version": "0.1.0",
   "identifier": "com.openconnect.gui",
   "build": {
@@ -16,7 +16,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "publisher": "OpenConnect GUI",
+    "publisher": "OpenGui",
     "resources": {
       "../.toolchain/openconnect": ".toolchain/openconnect"
     }
@@ -29,7 +29,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "OpenConnect GUI",
+        "title": "OpenGui",
         "width": 1175,
         "height": 710,
         "minWidth": 805,

@@ -58,6 +58,11 @@
     const modal = document.getElementById('add-profile-modal');
     const btnAddProfile = document.getElementById('btn-add-profile');
 
+    // Set when the profile modal is opened for editing an existing profile;
+    // null means the modal is in "add" mode. Assigned inside the modal setup.
+    let editingProfileId = null;
+    let editProfile = () => {};
+
     const mfaModal = document.getElementById('mfa-modal');
     const certModal = document.getElementById('cert-modal');
     const settingsModal = document.getElementById('settings-modal');
@@ -375,6 +380,7 @@
             <div class="profile-protocol">${escapeHtml(protocolLabel(p))}</div>
           </div>
           <div class="profile-actions">
+            <button class="btn-icon btn-edit-profile" data-id="${escapeHtml(p.id)}" title="Edit Profile" aria-label="Edit profile ${escapeHtml(p.name)}"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
             <button class="btn-icon btn-delete-profile" data-id="${escapeHtml(p.id)}" title="Delete Profile" aria-label="Delete profile ${escapeHtml(p.name)}"><svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
           </div>
         `;
@@ -385,6 +391,11 @@
           if (e.target.closest('.btn-delete-profile')) {
             e.stopPropagation();
             deleteProfile(p.id);
+            return;
+          }
+          if (e.target.closest('.btn-edit-profile')) {
+            e.stopPropagation();
+            editProfile(p.id);
             return;
           }
           if (getSimpleState() !== 'Disconnected' && getSimpleState() !== 'Failed') return;
@@ -839,16 +850,65 @@
         });
       };
 
+      // Populate the advanced controls from an existing profile (reverse of
+      // applyAdvancedFields). Missing keys leave the control at its default.
+      const fillAdvancedFields = (profile) => {
+        let anySet = false;
+        ADV_FIELDS.forEach(([id, key, kind]) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const v = profile[key];
+          if (kind === 'bool') {
+            el.checked = v === true;
+            if (el.checked) anySet = true;
+          } else if (v !== undefined && v !== null && v !== '') {
+            el.value = String(v);
+            anySet = true;
+          }
+        });
+        return anySet;
+      };
+
+      const modalHeading = document.getElementById('modal-heading');
+      const passwordInput = document.getElementById('input-password');
+
       btnAddProfile.onclick = () => {
+        editingProfileId = null;
+        modalHeading.textContent = 'New Connection Profile';
+        btnSaveModal.textContent = 'Save Profile';
+        passwordInput.placeholder = 'Password';
         document.getElementById('input-name').value = '';
         document.getElementById('input-server').value = '';
         document.getElementById('input-username').value = '';
-        document.getElementById('input-password').value = '';
+        passwordInput.value = '';
         clearAllFieldErrors();
         resetAdvancedFields();
         detectedCountry = null;
         detectSeq++;
         setFlagPreview(null);
+        openModal(modal);
+      };
+
+      // Open the profile modal pre-filled with an existing profile for editing.
+      editProfile = (id) => {
+        const prof = profiles.find((p) => p.id === id);
+        if (!prof) return;
+        editingProfileId = id;
+        modalHeading.textContent = 'Edit Connection Profile';
+        btnSaveModal.textContent = 'Update Profile';
+        passwordInput.placeholder = 'Password (leave blank to keep current)';
+        document.getElementById('input-name').value = prof.name || '';
+        document.getElementById('input-server').value = prof.server || '';
+        document.getElementById('input-username').value = prof.username || '';
+        passwordInput.value = '';
+        clearAllFieldErrors();
+        resetAdvancedFields();
+        const anyAdv = fillAdvancedFields(prof);
+        if (anyAdv) setAdvancedVisible(true);
+        detectedCountry = (prof.country_code && /^[a-z]{2}$/i.test(prof.country_code))
+          ? prof.country_code.toLowerCase() : null;
+        detectSeq++;
+        setFlagPreview(detectedCountry);
         openModal(modal);
       };
 
@@ -866,7 +926,7 @@
         detectDebounce = setTimeout(() => { detectDebounce = null; detectServerCountry(); }, 700);
       });
 
-      document.getElementById('btn-cancel-modal').onclick = () => modal.classList.remove('active');
+      document.getElementById('btn-cancel-modal').onclick = () => { editingProfileId = null; modal.classList.remove('active'); };
 
       const btnSaveModal = document.getElementById('btn-save-modal');
       btnSaveModal.onclick = async () => {
@@ -885,12 +945,17 @@
         if (detectDebounce) { clearTimeout(detectDebounce); detectDebounce = null; }
         await detectServerCountry();
 
-        const id = (crypto.randomUUID && crypto.randomUUID()) || Math.random().toString(36).substring(2);
+        const isEdit = !!editingProfileId;
+        const existing = isEdit ? profiles.find((p) => p.id === editingProfileId) : null;
+        const id = isEdit
+          ? editingProfileId
+          : ((crypto.randomUUID && crypto.randomUUID()) || Math.random().toString(36).substring(2));
         const profile = {
           id, name, server, username, password,
-          kill_switch: false,
+          kill_switch: (existing && existing.kill_switch) || false,
         };
         if (detectedCountry) profile.country_code = detectedCountry;
+        else if (existing && existing.country_code) profile.country_code = existing.country_code;
         applyAdvancedFields(profile);
 
         const advErr = document.getElementById('err-advanced');
@@ -898,7 +963,8 @@
 
         btnSaveModal.disabled = true;
         try {
-          await backend.invoke('add_profile', { profile });
+          await backend.invoke(isEdit ? 'update_profile' : 'add_profile', { profile });
+          // On edit only overwrite the stored password when a new one was typed.
           if (password) {
             try {
               await backend.invoke('store_credential', { profileId: id, username, password });
@@ -909,6 +975,7 @@
           }
           profiles = await backend.invoke('list_profiles') || [];
           if (!activeProfileId) activeProfileId = id;
+          editingProfileId = null;
           renderProfiles();
           renderState();
           modal.classList.remove('active');
