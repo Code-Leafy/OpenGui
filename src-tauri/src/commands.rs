@@ -1708,6 +1708,161 @@ pub fn get_tunnel_ip(manager: tauri::State<'_, Arc<ProcessManager>>) -> String {
     manager.get_tunnel_ip()
 }
 
+/// Query the current public IP address as seen from the internet.
+///
+/// While the VPN tunnel is up, this reflects the exit IP of the VPN server,
+/// which is what the user actually wants to see. Several lightweight
+/// plain-text endpoints are tried in order so a single outage doesn't break
+/// the feature.
+///
+/// # Errors
+///
+/// Returns an error string if every endpoint fails or returns a value that
+/// does not look like an IP address.
+#[tauri::command]
+pub async fn get_public_ip() -> Result<String, String> {
+    const ENDPOINTS: [&str; 3] = [
+        "https://api.ipify.org",
+        "https://ifconfig.me/ip",
+        "https://icanhazip.com",
+    ];
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut last_err = String::from("no endpoints tried");
+    for url in ENDPOINTS {
+        match client.get(url).send().await {
+            Ok(resp) => match resp.text().await {
+                Ok(body) => {
+                    let ip = body.trim();
+                    if looks_like_ip(ip) {
+                        return Ok(ip.to_string());
+                    }
+                    last_err = format!("unexpected response from {url}");
+                }
+                Err(e) => last_err = format!("{url}: {e}"),
+            },
+            Err(e) => last_err = format!("{url}: {e}"),
+        }
+    }
+
+    Err(last_err)
+}
+
+/// Cheap sanity check that a string looks like an IPv4 or IPv6 address, so we
+/// never surface a stray HTML error page as if it were an IP.
+fn looks_like_ip(s: &str) -> bool {
+    if s.is_empty() || s.len() > 45 {
+        return false;
+    }
+    s.parse::<std::net::IpAddr>().is_ok()
+}
+
+// ── Real network telemetry ────────────────────────────────────────────────────
+
+/// Real cumulative RX/TX byte counters for the tunnel adapter.
+///
+/// The frontend samples this on an interval and derives throughput from the
+/// difference between successive samples. Returns an error string while
+/// disconnected (no tunnel IP) or if the adapter counters can't be read.
+///
+/// # Errors
+///
+/// Returns an error string if there is no active tunnel or its statistics are
+/// unavailable.
+#[tauri::command]
+pub async fn get_adapter_stats(
+    manager: tauri::State<'_, Arc<ProcessManager>>,
+) -> Result<crate::netstats::AdapterStats, String> {
+    let ip = manager.get_tunnel_ip();
+    tokio::task::spawn_blocking(move || crate::netstats::get_adapter_stats(&ip))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Measure a real ICMP round-trip time (ms) through the tunnel.
+///
+/// Resolves the tunnel adapter's gateway (next hop) and pings it; if no gateway
+/// can be resolved it falls back to a well-known public host (`1.1.1.1`), which
+/// is routed through the tunnel while connected. Returns the RTT in
+/// milliseconds.
+///
+/// # Errors
+///
+/// Returns an error string if the target is unreachable or the reply can't be
+/// parsed.
+#[tauri::command]
+pub async fn ping_tunnel(
+    manager: tauri::State<'_, Arc<ProcessManager>>,
+) -> Result<u32, String> {
+    let ip = manager.get_tunnel_ip();
+    tokio::task::spawn_blocking(move || {
+        let target = resolve_ping_target(&ip);
+        crate::netstats::ping_host(&target)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Pick the best real host to ping: the tunnel adapter's gateway if resolvable,
+/// otherwise a reliable public anchor routed through the tunnel.
+#[cfg(target_os = "windows")]
+fn resolve_ping_target(tunnel_ip: &str) -> String {
+    resolve_tunnel_gateway(tunnel_ip).unwrap_or_else(|| "1.1.1.1".to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn resolve_ping_target(_tunnel_ip: &str) -> String {
+    "1.1.1.1".to_string()
+}
+
+/// Resolve the next-hop gateway of the adapter that owns `tunnel_ip` via
+/// `Get-NetRoute`. Returns `None` if it can't be determined.
+#[cfg(target_os = "windows")]
+fn resolve_tunnel_gateway(tunnel_ip: &str) -> Option<String> {
+    use crate::types::system32_exe;
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let ip = tunnel_ip.split('/').next().unwrap_or(tunnel_ip).trim();
+    ip.parse::<std::net::IpAddr>().ok()?;
+
+    let script = format!(
+        "$a = Get-NetIPAddress -IPAddress '{ip}' -ErrorAction SilentlyContinue | Select-Object -First 1; \
+         if (-not $a) {{ exit 2 }}; \
+         $r = Get-NetRoute -InterfaceIndex $a.InterfaceIndex -ErrorAction SilentlyContinue | \
+              Where-Object {{ $_.NextHop -ne '0.0.0.0' -and $_.NextHop -ne '::' }} | \
+              Select-Object -First 1; \
+         if ($r) {{ Write-Output $r.NextHop }}"
+    );
+
+    let out = Command::new(system32_exe("WindowsPowerShell\\v1.0\\powershell.exe"))
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+
+    let text = String::from_utf8_lossy(&out.stdout);
+    let gw = text.lines().map(str::trim).find(|l| !l.is_empty())?;
+    if gw.parse::<std::net::IpAddr>().is_ok() {
+        Some(gw.to_string())
+    } else {
+        None
+    }
+}
+
 // ── Global settings & tool toggles ────────────────────────────────────────────
 
 use crate::settings::{AppSettings, NetShieldConfig};

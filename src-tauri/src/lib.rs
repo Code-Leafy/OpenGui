@@ -13,6 +13,8 @@ pub mod geoip;
 pub mod killswitch;
 pub mod logging;
 pub mod netshield;
+/// Real network telemetry (adapter byte counters + ICMP ping).
+pub mod netstats;
 pub mod parser;
 pub mod process;
 pub mod settings;

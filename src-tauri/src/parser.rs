@@ -231,11 +231,16 @@ pub fn detect_state_change(line: &str) -> Option<ConnectionState> {
 
 /// Extract the tunnel's assigned local IP from openconnect's tunnel-up line.
 ///
-/// openconnect prints `Connected as <ip>` (optionally `(with DTLS)` or
-/// `, using SSL`). Returns a [`crate::types::TunnelInfo`] with that IP, or
-/// `None` if the line is not a tunnel-up announcement.
+/// Older openconnect prints `Connected as <ip>` (optionally `(with DTLS)` or
+/// `, using SSL`); newer versions (9.x) print `Configured as <ip>, with SSL
+/// connected and DTLS connected`. Both announce the assigned tunnel address.
+/// Returns a [`crate::types::TunnelInfo`] with that IP, or `None` if the line
+/// is not a tunnel-up announcement.
 pub fn extract_tunnel_info(line: &str) -> Option<crate::types::TunnelInfo> {
-    let rest = line.trim().strip_prefix("Connected as")?;
+    let trimmed = line.trim();
+    let rest = trimmed
+        .strip_prefix("Connected as")
+        .or_else(|| trimmed.strip_prefix("Configured as"))?;
     // The IP is the first whitespace-delimited token of the remainder.
     let ip = rest
         .split(|c: char| c.is_whitespace() || c == ',' || c == '(')
@@ -877,6 +882,16 @@ mod tests {
     fn extract_tunnel_info_ipv6_accepted() {
         let info = extract_tunnel_info("Connected as 2001:db8::1").unwrap();
         assert_eq!(info.ip, "2001:db8::1");
+    }
+
+    #[test]
+    fn extract_tunnel_info_configured_as_v9() {
+        // openconnect 9.x tunnel-up line.
+        let info = extract_tunnel_info(
+            "Configured as 10.10.159.253, with SSL connected and DTLS connected",
+        )
+        .unwrap();
+        assert_eq!(info.ip, "10.10.159.253");
     }
 
     #[test]

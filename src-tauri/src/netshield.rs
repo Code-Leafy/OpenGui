@@ -23,7 +23,9 @@ use crate::settings::{ADGUARD_IPV4, ADGUARD_IPV6};
 /// returned and the caller should treat NetShield as not engaged.
 #[cfg(target_os = "windows")]
 pub fn enable(tunnel_ip: &str) -> Result<(), String> {
-    let iface = match find_interface_for_ip(tunnel_ip) {
+    // The wintun adapter's IP may not be registered in `netsh` the instant the
+    // "Configured as" line prints, so retry the lookup briefly before giving up.
+    let iface = match find_interface_for_ip_retry(tunnel_ip) {
         Some(i) => i,
         None => {
             return Err(
@@ -247,6 +249,22 @@ use crate::types::system32_exe as system32;
 /// Parses the `netsh interface ip show address` dump for the block whose
 /// `IP Address` matches `tunnel_ip`, then returns the `Interface` name from that
 /// block. Returns `None` if no match is found or parsing fails.
+/// Look up the interface for `tunnel_ip`, retrying briefly to absorb the race
+/// between openconnect announcing the tunnel and Windows registering the
+/// adapter's IP. Up to ~5s total (10 tries, 500ms apart).
+#[cfg(target_os = "windows")]
+fn find_interface_for_ip_retry(tunnel_ip: &str) -> Option<String> {
+    for attempt in 0..10 {
+        if let Some(iface) = find_interface_for_ip(tunnel_ip) {
+            return Some(iface);
+        }
+        if attempt < 9 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+    }
+    None
+}
+
 #[cfg(target_os = "windows")]
 fn find_interface_for_ip(tunnel_ip: &str) -> Option<String> {
     use std::os::windows::process::CommandExt;

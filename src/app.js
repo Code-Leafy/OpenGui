@@ -17,21 +17,37 @@
     let settings = null; // global settings from backend
     let userRequestedDisconnect = false;
     let pendingCertProfileId = null;
-    let totalDl = 0;
-    let totalUl = 0;
+    let totalDl = 0; // cumulative bytes received this session (real)
+    let totalUl = 0; // cumulative bytes sent this session (real)
     let retryAttempts = 0;
     const MAX_RETRY_ATTEMPTS = 6;
     let pendingRetryTimeout = null;
     let statsInterval = null;
 
+    // Baseline adapter counters captured on connect, so totals reflect this
+    // session rather than the adapter's lifetime, plus the previous sample used
+    // to compute instantaneous throughput.
+    let statsBaseline = null; // { rx, tx }
+    let statsPrev = null;     // { rx, tx, t }
+    let statsErrorLogged = false;
+
     const POLL_MS = 1000;
 
-    function formatBytes(mb) {
-      return mb > 1024 ? (mb / 1024).toFixed(2) + ' GB' : Math.floor(mb) + ' MB';
+    // Format a raw byte count into a human-readable size (KB/MB/GB).
+    function formatBytes(bytes) {
+      const b = Math.max(0, bytes || 0);
+      if (b >= 1024 * 1024 * 1024) return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+      if (b >= 1024 * 1024) return (b / (1024 * 1024)).toFixed(2) + ' MB';
+      if (b >= 1024) return (b / 1024).toFixed(1) + ' KB';
+      return Math.round(b) + ' B';
     }
 
-    function formatSpeed(mbPerSec) {
-      return mbPerSec.toFixed(2) + ' MB/s';
+    // Format bytes-per-second into a readable throughput string.
+    function formatSpeed(bytesPerSec) {
+      const b = Math.max(0, bytesPerSec || 0);
+      if (b >= 1024 * 1024) return (b / (1024 * 1024)).toFixed(2) + ' MB/s';
+      if (b >= 1024) return (b / 1024).toFixed(1) + ' KB/s';
+      return Math.round(b) + ' B/s';
     }
 
     // --- DOM Elements ---
@@ -281,15 +297,30 @@
       timerInterval = setInterval(renderTimer, 1000);
     }
 
-    // Fetch the tunnel's assigned IP from the backend. Covers the cases where
-    // the tunnel-info event was missed (e.g. the app restored an already-open
-    // connection on launch).
+    // Show the IP the user is presenting to the internet. While connected this
+    // is the VPN exit IP, queried from a public "what's my IP" service. We fall
+    // back to the tunnel's locally-assigned IP if the lookup fails (e.g. offline
+    // or the exit blocks the request).
     async function refreshTunnelIp() {
+      if (getSimpleState() !== 'Connected') return;
+      statIp.textContent = 'Resolving…';
       try {
-        const ip = await backend.invoke('get_tunnel_ip');
-        if (ip && getSimpleState() === 'Connected') statIp.textContent = ip;
+        const ip = await backend.invoke('get_public_ip');
+        if (ip && getSimpleState() === 'Connected') {
+          statIp.textContent = ip;
+          return;
+        }
+      } catch (err) {
+        console.error('get_public_ip failed', err);
+      }
+      try {
+        const local = await backend.invoke('get_tunnel_ip');
+        if (getSimpleState() === 'Connected') {
+          statIp.textContent = local || '—';
+        }
       } catch (err) {
         console.error('get_tunnel_ip failed', err);
+        if (getSimpleState() === 'Connected') statIp.textContent = '—';
       }
     }
 
@@ -302,16 +333,36 @@
       statTimer.textContent = '00:00:00';
       totalDl = 0;
       totalUl = 0;
+      statsBaseline = null;
+      statsPrev = null;
+    }
+
+    // Measure a real ICMP round-trip through the tunnel (backend pings the
+    // tunnel gateway, falling back to a public anchor). Updates both the main
+    // panel ping and the sidebar latency figure.
+    let lastPingMs = null;
+    async function measurePing() {
+      if (getSimpleState() !== 'Connected') return;
+      try {
+        const ms = await backend.invoke('ping_tunnel');
+        if (getSimpleState() !== 'Connected') return;
+        lastPingMs = ms;
+        statPing.textContent = ms + 'ms';
+        if (statsEl.pingCurrent) statsEl.pingCurrent.textContent = ms;
+      } catch (err) {
+        console.error('ping_tunnel failed', err);
+        if (getSimpleState() === 'Connected') {
+          statPing.textContent = '—';
+          lastPingMs = null;
+        }
+      }
     }
 
     function startPing() {
       if (pingInterval) return;
-      statPing.textContent = (Math.floor(Math.random() * 20) + 15) + 'ms';
-      pingInterval = setInterval(() => {
-        if (sidebarStatsEl.classList.contains('active')) {
-          statPing.textContent = (Math.floor(Math.random() * 30) + 15) + 'ms';
-        }
-      }, 2000);
+      statPing.textContent = '…';
+      measurePing();
+      pingInterval = setInterval(measurePing, 2000);
     }
 
     function stopPing() {
@@ -319,6 +370,7 @@
         clearInterval(pingInterval);
         pingInterval = null;
       }
+      lastPingMs = null;
       statPing.textContent = '0ms';
     }
 
@@ -543,7 +595,7 @@
       if (el) el.classList.toggle('active', !!active);
     }
 
-    // --- Stats chart loop (visual only; real throughput not yet streamed) ---
+    // --- Stats chart loop (real throughput from adapter byte counters) ---
     // Top-level scope so both renderState() and setupEvents() can use them.
     let dlHistory = Array(20).fill(0);
     let ulHistory = Array(20).fill(0);
@@ -578,32 +630,67 @@
     }
 
     function zeroStats() {
-      statsEl.dlSpeed.textContent = '0.00 KB/s';
-      statsEl.ulSpeed.textContent = '0.00 KB/s';
-      statsEl.dlTotal.textContent = '0 MB';
-      statsEl.ulTotal.textContent = '0 MB';
+      statsEl.dlSpeed.textContent = '0 B/s';
+      statsEl.ulSpeed.textContent = '0 B/s';
+      statsEl.dlTotal.textContent = '0 B';
+      statsEl.ulTotal.textContent = '0 B';
       if (statsEl.pingCurrent) statsEl.pingCurrent.textContent = '0';
+      dlHistory = Array(20).fill(0);
+      ulHistory = Array(20).fill(0);
+      pingHistory = Array(20).fill(0);
+      updateChart();
+    }
+
+    // Poll the real adapter byte counters and derive throughput + totals from
+    // the difference between successive samples.
+    async function sampleStats() {
+      if (getSimpleState() !== 'Connected') return;
+      let cur;
+      try {
+        cur = await backend.invoke('get_adapter_stats');
+        statsErrorLogged = false;
+      } catch (err) {
+        console.error('get_adapter_stats failed', err);
+        if (!statsErrorLogged) {
+          statsErrorLogged = true;
+          addLog(Date.now(), 'WARN', 'Live throughput unavailable: ' + String(err));
+        }
+        return;
+      }
+      if (getSimpleState() !== 'Connected' || !cur) return;
+
+      const now = Date.now();
+      if (!statsBaseline) statsBaseline = { rx: cur.rx_bytes, tx: cur.tx_bytes };
+
+      let dlSpeed = 0;
+      let ulSpeed = 0;
+      if (statsPrev) {
+        const dt = (now - statsPrev.t) / 1000;
+        if (dt > 0) {
+          dlSpeed = Math.max(0, (cur.rx_bytes - statsPrev.rx) / dt);
+          ulSpeed = Math.max(0, (cur.tx_bytes - statsPrev.tx) / dt);
+        }
+      }
+      statsPrev = { rx: cur.rx_bytes, tx: cur.tx_bytes, t: now };
+
+      totalDl = Math.max(0, cur.rx_bytes - statsBaseline.rx);
+      totalUl = Math.max(0, cur.tx_bytes - statsBaseline.tx);
+
+      statsEl.dlSpeed.textContent = formatSpeed(dlSpeed);
+      statsEl.ulSpeed.textContent = formatSpeed(ulSpeed);
+      statsEl.dlTotal.textContent = formatBytes(totalDl);
+      statsEl.ulTotal.textContent = formatBytes(totalUl);
+
+      dlHistory.push(dlSpeed); ulHistory.push(ulSpeed);
+      pingHistory.push(lastPingMs != null ? lastPingMs : 0);
+      dlHistory.shift(); ulHistory.shift(); pingHistory.shift();
+      updateChart();
     }
 
     function startStatsLoop() {
       if (statsInterval || getSimpleState() !== 'Connected') return;
-      statsInterval = setInterval(() => {
-        const dlSpeed = Math.random() * 5 + 0.5;
-        const ulSpeed = Math.random() * 1.5 + 0.1;
-        totalDl += dlSpeed;
-        totalUl += ulSpeed;
-        const pingVal = Math.floor(Math.random() * 30 + 20);
-
-        statsEl.dlSpeed.textContent = formatSpeed(dlSpeed);
-        statsEl.ulSpeed.textContent = formatSpeed(ulSpeed);
-        statsEl.dlTotal.textContent = formatBytes(totalDl);
-        statsEl.ulTotal.textContent = formatBytes(totalUl);
-        if (statsEl.pingCurrent) statsEl.pingCurrent.textContent = pingVal;
-
-        dlHistory.push(dlSpeed); ulHistory.push(ulSpeed); pingHistory.push(pingVal);
-        dlHistory.shift(); ulHistory.shift(); pingHistory.shift();
-        updateChart();
-      }, POLL_MS);
+      sampleStats();
+      statsInterval = setInterval(sampleStats, POLL_MS);
     }
 
     function stopStatsLoop() {
@@ -1203,7 +1290,7 @@
             addLog(Date.now(), 'INFO', `Update v${info.version} available; downloading.`);
             await backend.invoke('install_update');
           } else {
-            updateStatusEl.textContent = `You are on the latest version (${(info && info.current_version) || '0.1.2'}).`;
+            updateStatusEl.textContent = `You are on the latest version (${(info && info.current_version) || '0.1.3'}).`;
             btnCheckUpdates.textContent = prev;
             btnCheckUpdates.disabled = false;
           }
