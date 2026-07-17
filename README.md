@@ -170,16 +170,6 @@ OpenGui/
 └── .github/workflows/release.yml # CI: build, sign, publish releases
 ```
 
----
-
-## Auto-Update
-
-OpenGui ships with the Tauri updater. Every published release includes a signed installer and a `latest.json` manifest generated in CI. On launch (and on demand), the app queries the latest release, verifies the update signature against an embedded public key, and installs it only if the signature is valid.
-
-Releases are produced automatically: pushing a tag such as `v1.0.0` triggers the [release workflow](.github/workflows/release.yml), which builds the installer, signs it with the updater key stored as a repository secret, and publishes the artifacts plus `latest.json` to GitHub Releases.
-
----
-
 <details>
 <summary><kbd>FAQ</kbd></summary>
 
