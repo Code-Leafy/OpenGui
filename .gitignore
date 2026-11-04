@@ -1,0 +1,38 @@
+# Rust / Cargo build output
+/src-tauri/target/
+target/
+
+# Vendored portable toolchain (large; recreate with setup.bat).
+# Ignore everything under .toolchain EXCEPT the prebuilt openconnect engine,
+# which the app bundles at build time and CI needs to produce a working installer.
+# (Do not exclude the .toolchain dir itself, or the re-include below can't work.)
+/.toolchain/*
+!/.toolchain/openconnect/
+# Never ship the stray wrapper backup.
+/.toolchain/openconnect/openconnect.exe.wrapper-backup
+
+# Updater signing keys — must never be committed.
+*.key
+*.key.pub
+minisign.key
+
+# OpenConnect source checkout (recreate with get-openconnect.bat)
+/openconnect-master/
+
+# Build / test artifacts and logs
+*.bak
+*.log
+*.tmp
+build_output.txt
+verify_output.txt
+
+# Downloaded engine update temp files
+openconnect.exe.download
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*~
+
+# Node (AI tooling, if reintroduced)
+node_modules/

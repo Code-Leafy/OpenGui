@@ -1,0 +1,17 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for OpenConnect GUI — least privilege for a single-window local VPN controller.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-is-maximized",
+    "window-state:default",
+    "updater:default",
+    "process:default"
+  ]
+}
